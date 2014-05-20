@@ -1900,13 +1900,8 @@ namespace VisiLibity
       holes_.push_back( polygons[i] );
     update_flattened_index_key();
   }
-  Environment::Environment(const std::string& filename)
+  Environment::Environment(std::istream &fin)
   {
-    std::ifstream fin(filename.c_str());
-    //if(fin.fail()) { std::cerr << "\x1b[5;31m" << "Input file
-    //opening failed." << "\x1b[0m\n" << "\a \n"; exit(1);}
-    assert( !fin.fail() );
-
     //Temporary vars for numbers to be read from file.
     double x_temp, y_temp;  
     std::vector<Point> vertices_temp;
@@ -1923,7 +1918,6 @@ namespace VisiLibity
       if( fin.eof() )
 	{ 
 	  outer_boundary_.set_vertices(vertices_temp);
-	  fin.close(); 
 	  update_flattened_index_key(); return;
 	}      
       vertices_temp.push_back( Point(x_temp, y_temp) );
@@ -1938,14 +1932,13 @@ namespace VisiLibity
       while( fin.peek() == '/' )
 	fin.ignore(200,'\n');
       if( fin.eof() )
-	{ fin.close(); update_flattened_index_key(); return; }
+	{ update_flattened_index_key(); return; }
       while( fin.peek() != '/' ){	
 	fin >> x_temp >> y_temp;
 	if( fin.eof() )
 	  { 
 	    polygon_temp.set_vertices(vertices_temp);
 	    holes_.push_back(polygon_temp);
-	    fin.close(); 
 	    update_flattened_index_key(); return;
 	  }
 	vertices_temp.push_back( Point(x_temp, y_temp) );
