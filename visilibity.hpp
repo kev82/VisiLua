@@ -90,6 +90,7 @@ License along with VisiLibity.  If not, see <http://www.gnu.org/licenses/>.
 #include <cstring>    //C-string manipulation
 #include <string>     //string class
 #include <cassert>    //assertions
+#include <sstream>
 
 namespace {
 
@@ -1376,13 +1377,39 @@ namespace VisiLibity
      * representing the Environment
      */
     Environment(const std::vector<Polygon>& polygons);
-    /** construct from *.environment file.
+    /** construct from *.environment file (through istream).
      *
-     * \author  Karl J. Obermeyer
+     * \author  Karl J. Obermeyer, Kevin Martin
      * \remarks  time complexity O(n), where n is the number of vertices
      * representing the Environment
      */
-    Environment(const std::string& filename);
+    Environment(std::istream &input);
+
+    /** construct from *.environment file.
+     *
+     * \author  Karl J. Obermeyer, Kevin Martin
+     * \remarks  Calls Environment(istream &) with appropriate istream
+     */
+	static Environment construct_from_filename(const std::string &filename) {
+		std::ifstream fin(filename.c_str());
+		//if(fin.fail()) { std::cerr << "\x1b[5;31m" << "Input file
+		//opening failed." << "\x1b[0m\n" << "\a \n"; exit(1);}
+		assert( !fin.fail() );
+
+		return Environment(fin);
+	}
+
+    /** construct from *.environment file as string.
+     *
+     * \author  Kevin Martin
+     * \remarks  Calls Environment(istream &) with appropriate istream
+     */
+	static Environment construct_from_filecontents(
+	 const std::string &contents) {
+		std::istringstream iss(contents);
+		return Environment(iss);
+	}
+
     //Accessors
     /** \brief  raw access to Polygons
      *

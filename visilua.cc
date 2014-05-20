@@ -18,6 +18,7 @@
 */
 #include <lua.hpp>
 #include <cassert>
+#include <sstream>
 
 extern "C" {
 int luaopen_visilua(lua_State *l);
@@ -422,6 +423,45 @@ int mtgc(lua_State *l) {
 	}
 }
 
+int mtSave(lua_State *l) {
+	lua_settop(l, 1);
+	luaL_checktype(l, 1, LUA_TUSERDATA);
+
+	try {
+		const Environment *pe = (const Environment *)lua_touserdata(l, 1);
+		const Environment &e = *pe;
+
+		luaL_Buffer lb;
+		luaL_buffinit(l, &lb);
+
+		std::ostringstream oss;
+
+		for(int i=0;i!=e.h()+1;++i) {
+			oss.clear();
+			oss.seekp(0);
+			oss << "//Polygon " << i << ", ";
+			if(i == 0) oss << "the boundary"; else oss << "a hole";
+			oss << "\n" << std::ends;
+
+			luaL_addstring(&lb, oss.str().c_str());
+
+			const Polygon &poly = e[i];
+			for(int j=0;j!=poly.n();++j) {
+				oss.clear();
+				oss.seekp(0);
+				oss << poly[j].x() << "  " << poly[j].y() << "\n";
+				oss << std::ends;
+				luaL_addstring(&lb, oss.str().c_str());
+			}
+		}
+
+		luaL_pushresult(&lb);
+		return 1;
+	} catch(std::exception &e) {
+		return luaL_error(l, "envdef::mtSave caught '%s'", e.what());
+	}
+}
+
 int setMetatable(lua_State *l) {
 	lua_settop(l, 1);
 	luaL_checktype(l, 1, LUA_TUSERDATA);
@@ -434,6 +474,12 @@ int setMetatable(lua_State *l) {
 
 		lua_pushcfunction(l, mtgc);
 		lua_setfield(l, -2, "__gc");
+
+		lua_pushvalue(l, -1);
+		lua_setfield(l, -2, "__index");
+
+		lua_pushcfunction(l, mtSave);
+		lua_setfield(l, -2, "save");
 
 		lua_pushvalue(l, -1);
 		lua_rawsetp(l, LUA_REGISTRYINDEX, (void *)setMetatable);
@@ -469,40 +515,50 @@ int construct(lua_State *l) {
 		const std::string &what() const { return error_; }
 	};
 
-	lua_settop(l, 1);	//[t]
-	luaL_checktype(l, 1, LUA_TTABLE);	
+	lua_settop(l, 1);	//[?]
+	if(lua_type(l, 1) != LUA_TSTRING &&
+	 lua_type(l, 1) != LUA_TTABLE) {
+		return luaL_argerror(l, 1, "Expected string or table");
+	}
 
 	Environment *pe =
 	 (Environment *)lua_newuserdata(l, sizeof(Environment));	//[tu]
 
 	try {
-		std::vector<Polygon> def;
+		if(lua_type(l, 1) == LUA_TTABLE) {
+			std::vector<Polygon> def;
 
-		lua_getfield(l, 1, "boundary");	//[tu?]
-		if(!polygon::is(l, -1)) {
-			throw LuaError("Boundary should be a polygon");
-		}
-		def.push_back( ((polygon::userdata *)lua_touserdata(l, -1))->ccw() );
-		lua_pop(l, 1);	//[tu]
-
-		lua_getfield(l, 1, "holes");	//[tu?]
-		if(lua_type(l, -1) != LUA_TTABLE) {
-			throw LuaError("Holes should be a table");
-		}
-		int holes = lua_rawlen(l, -1);
-		for(int i=1;i<=holes;++i) {
-			lua_rawgeti(l, -1, i);	//[tut?]
+			lua_getfield(l, 1, "boundary");	//[tu?]
 			if(!polygon::is(l, -1)) {
-				throw LuaError("Each hole should be a polygon");
+				throw LuaError("Boundary should be a polygon");
 			}
-
 			def.push_back(
-			 ((polygon::userdata *)lua_touserdata(l, -1))->cw() );
-			lua_pop(l, 1);	//[tut]
-		}
-		lua_pop(l, 1);	//[tu]
+			 ((polygon::userdata *)lua_touserdata(l, -1))->ccw() );
+			lua_pop(l, 1);	//[tu]
 
-		new (pe) Environment(def);
+			lua_getfield(l, 1, "holes");	//[tu?]
+			if(lua_type(l, -1) != LUA_TTABLE) {
+				throw LuaError("Holes should be a table");
+			}
+			int holes = lua_rawlen(l, -1);
+			for(int i=1;i<=holes;++i) {
+				lua_rawgeti(l, -1, i);	//[tut?]
+				if(!polygon::is(l, -1)) {
+					throw LuaError("Each hole should be a polygon");
+				}
+
+				def.push_back(
+				 ((polygon::userdata *)lua_touserdata(l, -1))->cw() );
+				lua_pop(l, 1);	//[tut]
+			}
+			lua_pop(l, 1);	//[tu]
+
+			new (pe) Environment(def);
+		} else {
+			new (pe) Environment(
+			 Environment::construct_from_filecontents(
+			 lua_tostring(l, 1)));
+		}
 	} catch(LuaError &le) {
 		lua_pushstring(l, le.what().c_str());
 		return lua_error(l);
